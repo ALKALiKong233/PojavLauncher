@@ -7,9 +7,15 @@ import static net.kdt.pojavlaunch.Architecture.is32BitsDevice;
 
 import android.app.Activity;
 import android.content.*;
+import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Build;
 import android.util.Log;
+
+import androidx.core.view.DisplayCutoutCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 
 import net.kdt.pojavlaunch.*;
 import net.kdt.pojavlaunch.multirt.MultiRTUtils;
@@ -67,7 +73,7 @@ public class LauncherPreferences {
     public static boolean PREF_VERIFY_MANIFEST = true;
     public static String PREF_DOWNLOAD_SOURCE = "default";
     public static boolean PREF_SKIP_NOTIFICATION_PERMISSION_CHECK = false;
-
+    public static boolean PREF_VSYNC_IN_ZINK = true;
 
 
     public static void loadPreferences(Context ctx) {
@@ -113,6 +119,7 @@ public class LauncherPreferences {
         PREF_DOWNLOAD_SOURCE = DEFAULT_PREF.getString("downloadSource", "default");
         PREF_VERIFY_MANIFEST = DEFAULT_PREF.getBoolean("verifyManifest", true);
         PREF_SKIP_NOTIFICATION_PERMISSION_CHECK = DEFAULT_PREF.getBoolean(PREF_KEY_SKIP_NOTIFICATION_CHECK, false);
+        PREF_VSYNC_IN_ZINK = DEFAULT_PREF.getBoolean("vsync_in_zink", true);
 
         String argLwjglLibname = "-Dorg.lwjgl.opengl.libname=";
         for (String arg : JREUtils.parseJavaArguments(PREF_CUSTOM_JAVA_ARGS)) {
@@ -160,17 +167,20 @@ public class LauncherPreferences {
     /** Compute the notch size to avoid being out of bounds */
     public static void computeNotchSize(Activity activity) {
         if (Build.VERSION.SDK_INT < P) return;
-
         try {
+            final Rect cutout;
             if(SDK_INT >= Build.VERSION_CODES.S){
-                Rect notchRect = activity.getWindowManager().getCurrentWindowMetrics().getWindowInsets().getDisplayCutout().getBoundingRects().get(0);
-                LauncherPreferences.PREF_NOTCH_SIZE = Math.min(notchRect.width(), notchRect.height());
-                Tools.updateWindowSize(activity);
-                return;
+                cutout = activity.getWindowManager().getCurrentWindowMetrics().getWindowInsets().getDisplayCutout().getBoundingRects().get(0);
+            } else {
+                cutout = activity.getWindow().getDecorView().getRootWindowInsets().getDisplayCutout().getBoundingRects().get(0);
             }
-            Rect notchRect = activity.getWindow().getDecorView().getRootWindowInsets().getDisplayCutout().getBoundingRects().get(0);
-            // Math min is to handle all rotations
-            LauncherPreferences.PREF_NOTCH_SIZE = Math.min(notchRect.width(), notchRect.height());
+
+            // Notch values are rotation sensitive, handle all cases
+            int orientation = activity.getResources().getConfiguration().orientation;
+            if (orientation == Configuration.ORIENTATION_PORTRAIT) LauncherPreferences.PREF_NOTCH_SIZE = cutout.height();
+            else if (orientation == Configuration.ORIENTATION_LANDSCAPE) LauncherPreferences.PREF_NOTCH_SIZE = cutout.width();
+            else LauncherPreferences.PREF_NOTCH_SIZE = Math.min(cutout.width(), cutout.height());
+
         }catch (Exception e){
             Log.i("NOTCH DETECTION", "No notch detected, or the device if in split screen mode");
             LauncherPreferences.PREF_NOTCH_SIZE = -1;

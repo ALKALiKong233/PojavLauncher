@@ -1,5 +1,6 @@
 package net.kdt.pojavlaunch;
 
+import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 import android.Manifest;
 import android.app.NotificationManager;
 import android.content.Context;
@@ -23,7 +24,6 @@ import androidx.fragment.app.FragmentManager;
 import com.kdt.mcgui.ProgressLayout;
 import com.kdt.mcgui.mcAccountSpinner;
 
-import net.kdt.pojavlaunch.lifecycle.ContextExecutor;
 import net.kdt.pojavlaunch.contracts.OpenDocumentWithExtension;
 import net.kdt.pojavlaunch.extra.ExtraConstants;
 import net.kdt.pojavlaunch.extra.ExtraCore;
@@ -31,6 +31,8 @@ import net.kdt.pojavlaunch.extra.ExtraListener;
 import net.kdt.pojavlaunch.fragments.MainMenuFragment;
 import net.kdt.pojavlaunch.fragments.MicrosoftLoginFragment;
 import net.kdt.pojavlaunch.fragments.SelectAuthFragment;
+import net.kdt.pojavlaunch.lifecycle.ContextAwareDoneListener;
+import net.kdt.pojavlaunch.lifecycle.ContextExecutor;
 import net.kdt.pojavlaunch.modloaders.modpacks.ModloaderInstallTracker;
 import net.kdt.pojavlaunch.modloaders.modpacks.imagecache.IconCacheJanitor;
 import net.kdt.pojavlaunch.prefs.LauncherPreferences;
@@ -40,7 +42,7 @@ import net.kdt.pojavlaunch.progresskeeper.TaskCountListener;
 import net.kdt.pojavlaunch.services.ProgressServiceKeeper;
 import net.kdt.pojavlaunch.tasks.AsyncMinecraftDownloader;
 import net.kdt.pojavlaunch.tasks.AsyncVersionList;
-import net.kdt.pojavlaunch.lifecycle.ContextAwareDoneListener;
+import net.kdt.pojavlaunch.tasks.MinecraftDownloader;
 import net.kdt.pojavlaunch.utils.NotificationUtils;
 import net.kdt.pojavlaunch.value.launcherprofiles.LauncherProfiles;
 import net.kdt.pojavlaunch.value.launcherprofiles.MinecraftProfile;
@@ -84,7 +86,7 @@ public class LauncherActivity extends BaseActivity {
         // Allow starting the add account only from the main menu, should it be moved to fragment itself ?
         if(!(fragment instanceof MainMenuFragment)) return false;
 
-        Tools.swapFragment(this, SelectAuthFragment.class, SelectAuthFragment.TAG, true, null);
+        Tools.swapFragment(this, SelectAuthFragment.class, SelectAuthFragment.TAG, null);
         return false;
     };
 
@@ -92,12 +94,10 @@ public class LauncherActivity extends BaseActivity {
     private final View.OnClickListener mSettingButtonListener = v -> {
         Fragment fragment = getSupportFragmentManager().findFragmentById(mFragmentView.getId());
         if(fragment instanceof MainMenuFragment){
-            Tools.swapFragment(this, LauncherPreferenceFragment.class, SETTING_FRAGMENT_TAG, true, null);
+            Tools.swapFragment(this, LauncherPreferenceFragment.class, SETTING_FRAGMENT_TAG, null);
         } else{
             // The setting button doubles as a home button now
-            while(!(getSupportFragmentManager().findFragmentById(mFragmentView.getId()) instanceof MainMenuFragment)){
-                getSupportFragmentManager().popBackStackImmediate();
-            }
+            Tools.backToMainMenu(this);
         }
     };
 
@@ -132,7 +132,7 @@ public class LauncherActivity extends BaseActivity {
         }
         String normalizedVersionId = AsyncMinecraftDownloader.normalizeVersionId(prof.lastVersionId);
         JMinecraftVersionList.Version mcVersion = AsyncMinecraftDownloader.getListedVersion(normalizedVersionId);
-        new AsyncMinecraftDownloader().start(
+        new MinecraftDownloader().start(
                 this,
                 mcVersion,
                 normalizedVersionId,
@@ -155,9 +155,27 @@ public class LauncherActivity extends BaseActivity {
     private WeakReference<Runnable> mRequestNotificationPermissionRunnable;
 
     @Override
+    protected boolean shouldIgnoreNotch() {
+        return getResources().getConfiguration().orientation == ORIENTATION_PORTRAIT || super.shouldIgnoreNotch();
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_pojav_launcher);
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        // If we don't have a back stack root yet...
+        if(fragmentManager.getBackStackEntryCount() < 1) {
+            // Manually add the first fragment to the backstack to get easily back to it
+            // There must be a better way to handle the root though...
+            // (artDev: No, there is not. I've spent days researching this for another unrelated project.)
+            fragmentManager.beginTransaction()
+                    .setReorderingAllowed(true)
+                    .addToBackStack("ROOT")
+                    .add(R.id.container_fragment, MainMenuFragment.class, null, "ROOT").commit();
+        }
+
+
         IconCacheJanitor.runJanitor();
         mRequestNotificationPermissionLauncher = registerForActivityResult(
                 new ActivityResultContracts.RequestPermission(),
@@ -242,6 +260,11 @@ public class LauncherActivity extends BaseActivity {
                 fragment.goBack();
                 return;
             }
+        }
+
+        // Check if we are at the root then
+        if(getVisibleFragment("ROOT") != null){
+            finish();
         }
 
         super.onBackPressed();

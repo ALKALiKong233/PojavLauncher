@@ -7,6 +7,7 @@ import static net.kdt.pojavlaunch.Tools.NATIVE_LIB_DIR;
 import static net.kdt.pojavlaunch.Tools.currentDisplayMetrics;
 import static net.kdt.pojavlaunch.Tools.shareLog;
 import static net.kdt.pojavlaunch.prefs.LauncherPreferences.PREF_DUMP_SHADERS;
+import static net.kdt.pojavlaunch.prefs.LauncherPreferences.PREF_VSYNC_IN_ZINK;
 import static net.kdt.pojavlaunch.prefs.LauncherPreferences.PREF_ZINK_PREFER_SYSTEM_DRIVER;
 
 import android.app.*;
@@ -193,6 +194,10 @@ public class JREUtils {
             envMap.put("LIBGL_VGPU_DUMP", "1");
         if(PREF_ZINK_PREFER_SYSTEM_DRIVER)
             envMap.put("POJAV_ZINK_PREFER_SYSTEM_DRIVER", "1");
+        if(PREF_VSYNC_IN_ZINK)
+            envMap.put("POJAV_VSYNC_IN_ZINK", "1");
+        if(Tools.deviceHasHangingLinker())
+            envMap.put("POJAV_EMUI_ITERATOR_MITIGATE", "1");
 
 
         // The OPEN GL version is changed according
@@ -561,7 +566,6 @@ public class JREUtils {
     static {
         System.loadLibrary("pojavexec");
         System.loadLibrary("pojavexec_awt");
-        dlopen("libxhook.so");
         System.loadLibrary("istdio");
     }
 }
